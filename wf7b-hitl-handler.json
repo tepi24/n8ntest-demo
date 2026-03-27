@@ -1,0 +1,129 @@
+{
+  "name": "WF7b - HITL Label Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "hitl-label",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-1",
+      "name": "Webhook - HITL Label Callback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 320],
+      "webhookId": "hitl-label-callback"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and extract GET query params: ?paper_id=XXX&label=relevant\nconst q = $input.first().json.query || {};\nconst paper_id = (q.paper_id || '').trim();\nconst label    = (q.label    || '').trim().toLowerCase();\nconst valid    = ['relevant', 'irrelevant', 'uncertain'];\nif (!paper_id)          throw new Error('Missing paper_id parameter');\nif (!valid.includes(label)) throw new Error('Invalid label: ' + label + '. Must be one of: ' + valid.join(', '));\nreturn [{ json: { paper_id, label } }];"
+      },
+      "id": "node-2",
+      "name": "Code - Validate Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [464, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.paper_labels\nSET label = $1, source = 'human', labeled_at = NOW()\nWHERE paper_id = $2;",
+        "options": {
+          "queryReplacement": "={{ [$json.label, $json.paper_id] }}"
+        }
+      },
+      "id": "node-3",
+      "name": "PostgreSQL - Save human label",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [688, 320],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COUNT(*) FILTER (WHERE source = 'human')  AS human_count,\n  COUNT(*) FILTER (WHERE source = 'auto')   AS auto_count,\n  COUNT(*) FILTER (WHERE source = 'pending') AS pending_count,\n  COUNT(*) FILTER (WHERE label  = 'relevant'   AND source = 'human') AS human_relevant,\n  COUNT(*) FILTER (WHERE label  = 'irrelevant' AND source = 'human') AS human_irrelevant,\n  COUNT(*) FILTER (WHERE label  = 'uncertain'  AND source = 'human') AS human_uncertain\nFROM public.paper_labels;",
+        "options": {}
+      },
+      "id": "node-4",
+      "name": "PostgreSQL - Get label stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [912, 320],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build confirmation HTML page + Telegram message\nconst stats  = $input.first().json;\nconst params = $('Code - Validate Params').first().json;\n\nconst humanCount     = parseInt(stats.human_count     || 0);\nconst autoCount      = parseInt(stats.auto_count      || 0);\nconst pendingCount   = parseInt(stats.pending_count   || 0);\nconst humanRelevant  = parseInt(stats.human_relevant  || 0);\nconst humanIrrelevant= parseInt(stats.human_irrelevant|| 0);\nconst humanUncertain = parseInt(stats.human_uncertain || 0);\n\nconst label     = params.label;\nconst paper_id  = params.paper_id;\nconst emoji     = { relevant: '✅', irrelevant: '❌', uncertain: '🤔' }[label] || '📌';\nconst milestone = humanCount > 0 && humanCount % 10 === 0;\n\n// Telegram notification text\nconst milestoneBlock = milestone\n  ? `\\n\\n🎯 <b>Milestone: ${humanCount} human labels!</b>\\nActive learning loop ready — queue WF6 retraining.`\n  : '';\nconst telegramText = [\n  `${emoji} <b>Label saved: ${label}</b>`,\n  '',\n  '📊 <b>Label stats</b>',\n  `👤 Human: ${humanCount}  (✅${humanRelevant} ❌${humanIrrelevant} 🤔${humanUncertain})`,\n  `🤖 Auto: ${autoCount}  |  ⏳ Pending: ${pendingCount}`,\n  milestoneBlock\n].join('\\n');\n\n// HTML confirmation page (styled, mobile-friendly)\nconst milestoneHtml = milestone\n  ? `<div style=\"margin-top:12px;padding:10px;background:#FFF8E1;border-radius:8px;color:#D4A843;font-weight:bold;font-size:13px\">🎯 Milestone: ${humanCount} human labels!</div>`\n  : '';\nconst html = `<!DOCTYPE html>\n<html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Label Saved</title></head>\n<body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F0F4F8;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0\">\n  <div style=\"background:white;border-radius:20px;padding:36px 28px;max-width:360px;width:90%;box-shadow:0 8px 24px rgba(0,0,0,0.1);text-align:center\">\n    <div style=\"font-size:56px;margin-bottom:12px\">${emoji}</div>\n    <h2 style=\"color:#1B3A5C;margin:0 0 6px;font-size:22px\">Label Saved!</h2>\n    <p style=\"font-size:18px;color:#333;margin:0 0 20px\"><b>${label}</b></p>\n    <div style=\"background:#F7FAFC;border-radius:10px;padding:14px;font-size:13px;color:#555;text-align:left\">\n      <div style=\"display:flex;justify-content:space-between;margin-bottom:6px\">\n        <span>👤 Human labels</span><b>${humanCount}</b>\n      </div>\n      <div style=\"display:flex;justify-content:space-between;margin-bottom:6px\">\n        <span>🤖 Auto labels</span><b>${autoCount}</b>\n      </div>\n      <div style=\"display:flex;justify-content:space-between\">\n        <span>⏳ Pending review</span><b>${pendingCount}</b>\n      </div>\n    </div>\n    ${milestoneHtml}\n    <p style=\"color:#AAB;font-size:12px;margin-top:20px\">You can close this tab.</p>\n  </div>\n</body></html>`;\n\nreturn [{ json: { html, telegramText, label, paper_id, human_count: humanCount, is_milestone: milestone } }];"
+      },
+      "id": "node-5",
+      "name": "Code - Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1136, 320]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.telegramText }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "node-6",
+      "name": "Telegram - Label confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1360, 160],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram account 5" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "text/html; charset=utf-8" }
+            ]
+          }
+        }
+      },
+      "id": "node-7",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1360, 480]
+    }
+  ],
+  "connections": {
+    "Webhook - HITL Label Callback": {
+      "main": [[{ "node": "Code - Validate Params", "type": "main", "index": 0 }]]
+    },
+    "Code - Validate Params": {
+      "main": [[{ "node": "PostgreSQL - Save human label", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL - Save human label": {
+      "main": [[{ "node": "PostgreSQL - Get label stats", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL - Get label stats": {
+      "main": [[{ "node": "Code - Build Response", "type": "main", "index": 0 }]]
+    },
+    "Code - Build Response": {
+      "main": [[
+        { "node": "Telegram - Label confirmation", "type": "main", "index": 0 },
+        { "node": "Respond to Webhook",           "type": "main", "index": 0 }
+      ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [],
+  "meta": { "savedAt": "2026-03-26", "instance": "YOUR_INSTANCE.app.n8n.cloud" }
+}

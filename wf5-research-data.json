@@ -1,0 +1,618 @@
+{
+  "name": "WF5 - Research Data Collection (Production Pipeline)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-1",
+      "name": "Schedule - Daily 6 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.totalResults }}",
+              "rightValue": "={{ ($json.offset || 0) + 100 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-4",
+      "name": "More pages?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        464,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "offset",
+              "value": "={{ ($json.offset || 0) + 100 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-5",
+      "name": "Set - offset +100",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        688,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://export.arxiv.org/api/query?search_query=cat:cs.AI&start={{ $json.offset || 0 }}&max_results=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "ResearchBot/1.0"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "node-2",
+      "name": "HTTP Request - arXiv API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        912,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\nfor (const item of items) {\n  const body = item.json.data || \"\";\n  const entries = body.match(/<entry>[\\s\\S]*?<\\/entry>/g) || [];\n  for (const entry of entries) {\n    const id = (entry.match(/<id>(.*?)<\\/id>/) || [])[1] || \"\";\n    const title = (entry.match(/<title>([\\s\\S]*?)<\\/title>/) || [])[1] || \"\";\n    const summary = (entry.match(/<summary>([\\s\\S]*?)<\\/summary>/) || [])[1] || \"\";\n    const published = (entry.match(/<published>(.*?)<\\/published>/) || [])[1] || \"\";\n    const authors = [...entry.matchAll(/<name>(.*?)<\\/name>/g)].map(m => m[1]).join(\", \");\n    results.push({json: {paper_id: id.split(\"/abs/\").pop() || id,\n      title: title.trim().replace(/\\s+/g, \" \"),\n      abstract: summary.trim().replace(/\\s+/g, \" \"),\n      authors, published_date: published, source: \"arxiv\", url: id.trim()}});\n  }\n}\nreturn results;"
+      },
+      "id": "node-3",
+      "name": "Code Node - Parse arXiv",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search?query=artificial+intelligence&fields=paperId,title,abstract,authors,year,externalIds&limit=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-6",
+      "name": "HTTP Request - Semantic Scholar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        912,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\nfor (const item of items) {\n  const papers = item.json.data || [];\n  for (const paper of papers) {\n    results.push({json: {paper_id: paper.paperId || \"\",\n      title: paper.title || \"\", abstract: paper.abstract || \"\",\n      authors: (paper.authors || []).map(a => a.name).join(\", \"),\n      published_date: paper.year ? String(paper.year) + \"-01-01\" : \"\",\n      source: \"semantic_scholar\",\n      url: \"https://www.semanticscholar.org/paper/\" + paper.paperId}});\n  }\n}\nreturn results;"
+      },
+      "id": "node-7",
+      "name": "Code Node - Parse Semantic Scholar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=artificial+intelligence&retmax=100&retmode=json",
+        "options": {}
+      },
+      "id": "node-8",
+      "name": "HTTP Request - PubMed API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        912,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\nfor (const item of items) {\n  const ids = (item.json.esearchresult || {}).idlist || [];\n  for (const pmid of ids) {\n    results.push({json: {paper_id: \"pubmed_\" + pmid,\n      title: \"\", abstract: \"\", authors: \"\", published_date: \"\",\n      source: \"pubmed\",\n      url: \"https://pubmed.ncbi.nlm.nih.gov/\" + pmid + \"/\", pmid}});\n  }\n}\nreturn results;"
+      },
+      "id": "node-9",
+      "name": "Code Node - Parse PubMed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "node-10",
+      "name": "Merge Node - Combine all sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1360,
+        344
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst seen = new Set();\nconst unique = [];\nfor (const item of items) {\n  const key = item.json.paper_id || (item.json.title || \"\").toLowerCase().trim();\n  if (key && !seen.has(key)) { seen.add(key); unique.push(item); }\n}\nreturn unique;"
+      },
+      "id": "node-11",
+      "name": "Code Node - Deduplicate by ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        344
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.research_papers (paper_id TEXT PRIMARY KEY, title TEXT, abstract TEXT, authors TEXT, published_date TEXT, source TEXT, url TEXT, created_at TIMESTAMPTZ DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS public.paper_embeddings (paper_id TEXT PRIMARY KEY, embedding TEXT, created_at TIMESTAMPTZ DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS public.collection_watermark (id SERIAL PRIMARY KEY, last_run TIMESTAMPTZ, last_paper_id TEXT);\nINSERT INTO public.collection_watermark (last_run, last_paper_id) SELECT NOW(), NULL WHERE NOT EXISTS (SELECT 1 FROM public.collection_watermark);\nINSERT INTO public.research_papers (paper_id, title, abstract, authors, published_date, source, url, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) ON CONFLICT (paper_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$json.paper_id, $json.title, $json.abstract, $json.authors, $json.published_date, $json.source, $json.url] }}"
+        }
+      },
+      "id": "node-12",
+      "name": "PostgreSQL - Upsert ON CONFLICT",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1808,
+        344
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => ({json: {\n  paper_id: item.json.paper_id,\n  title: item.json.title,\n  abstract: item.json.abstract,\n  embed_input: (\"Title: \" + item.json.title + \"\\n\\nAbstract: \" + item.json.abstract).substring(0, 8000)\n}}));"
+      },
+      "id": "node-13",
+      "name": "Code Node - Build Embed payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        248
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.jina.ai/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_JINA_API_KEY_PREFIX36944923a35a62f3bab05641vdOFm-ZCL3e9R_15V0v8XCJFtLpA"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"jina-embeddings-v3\", \"input\": {{ JSON.stringify(Array.isArray($json.embed_input) ? $json.embed_input : [$json.embed_input]) }}, \"dimensions\": 512 }",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "node-14",
+      "name": "HTTP Request - Embed abstracts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2256,
+        248
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.paper_embeddings (paper_id, embedding, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (paper_id) DO UPDATE SET embedding = EXCLUDED.embedding;",
+        "options": {
+          "queryReplacement": "={{ [$('Code Node - Build Embed payload').item.json.paper_id, JSON.stringify($json.data[0].embedding)] }}"
+        }
+      },
+      "id": "node-15",
+      "name": "PostgreSQL - Store vector embedding",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2480,
+        248
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.collection_watermark SET last_run = NOW(), last_paper_id = $1 WHERE id = 1;",
+        "options": {
+          "queryReplacement": "={{ [$('Code Node - Deduplicate by ID').last().json.paper_id] }}"
+        }
+      },
+      "id": "node-16",
+      "name": "PostgreSQL - Update watermark",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2032,
+        440
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = p.json.title || '(no title)';\n  const source   = p.json.source || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? '\\n   ' + abstract + '…' : '';\n  const urlLine  = p.json.url ? '\\n   ' + p.json.url : '';\n  return (i+1) + '. ' + title + '\\n   ' + source + ' | ' + date + snippet + urlLine;\n}).join('\\n\\n');\nreturn [{json: {count, digest:\n  'Daily Research Digest - ' + new Date().toDateString() +\n  '\\n\\nNew papers collected: ' + count +\n  '\\n\\nTop picks:\\n\\n' + topPapers +\n  '\\n\\nSources: arXiv, Semantic Scholar, PubMed'\n}}];"
+      },
+      "id": "node-17",
+      "name": "Set Node - Build digest message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2704,
+        248
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.digest }}",
+        "additionalFields": {}
+      },
+      "id": "node-18",
+      "name": "Telegram - Daily digest notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2928,
+        248
+      ],
+      "webhookId": "14ec3d15-70f7-4b0c-90a9-b1aa661f495f",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "node-19",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=Research pipeline FAILED!\nWorkflow: {{ $json.workflow.name }}\nError: {{ $json.error.message }}\nNode: {{ $json.error.node }}\nTime: {{ $now }}",
+        "additionalFields": {}
+      },
+      "id": "node-20",
+      "name": "Telegram - Error Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        832
+      ],
+      "webhookId": "e1431f1e-6853-42b8-96c4-960616313a36",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule - Daily 6 AM": {
+      "main": [
+        [
+          {
+            "node": "More pages?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - Semantic Scholar",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request - PubMed API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "More pages?": {
+      "main": [
+        [
+          {
+            "node": "Set - offset +100",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Node - Combine all sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set - offset +100": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - arXiv API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - arXiv API": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Parse arXiv",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Parse arXiv": {
+      "main": [
+        [
+          {
+            "node": "Merge Node - Combine all sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Semantic Scholar": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Parse Semantic Scholar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Parse Semantic Scholar": {
+      "main": [
+        [
+          {
+            "node": "Merge Node - Combine all sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HTTP Request - PubMed API": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Parse PubMed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Parse PubMed": {
+      "main": [
+        [
+          {
+            "node": "Merge Node - Combine all sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Node - Combine all sources": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Deduplicate by ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Deduplicate by ID": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL - Upsert ON CONFLICT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL - Upsert ON CONFLICT": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Build Embed payload",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PostgreSQL - Update watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Build Embed payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Embed abstracts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Embed abstracts": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL - Store vector embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL - Store vector embedding": {
+      "main": [
+        [
+          {
+            "node": "Set Node - Build digest message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Node - Build digest message": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Daily digest notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "tags": [],
+  "meta": {
+    "savedAt": "2026-03-26",
+    "instance": "YOUR_INSTANCE.app.n8n.cloud"
+  }
+}

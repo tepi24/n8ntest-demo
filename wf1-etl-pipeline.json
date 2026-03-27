@@ -1,0 +1,249 @@
+{
+  "name": "WF1 - ETL API to PostgreSQL Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "_limit",
+              "value": "20"
+            },
+            {
+              "name": "_page",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "http-extract",
+      "name": "HTTP Request - Extract",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst valid = [], invalid = [];\nfor (const item of items) {\n  const d = item.json;\n  if (d.id === undefined) { invalid.push({reason:\"missing id\"}); continue; }\n  if (isNaN(Number(d.userId))) { invalid.push({id:d.id,reason:\"userId non-numeric\"}); continue; }\n  valid.push({json:{id:String(d.id),value:Number(d.userId),label:String(d.title).slice(0,80),source:\"jsonplaceholder-posts\",ingested_at:$now.toISO()}});\n}\nif (valid.length===0) throw new Error(\"0 valid records\");\nreturn valid;"
+      },
+      "id": "code-transform",
+      "name": "Code Node - Transform",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.records (id TEXT PRIMARY KEY, value NUMERIC, label TEXT, source TEXT, ingested_at TIMESTAMPTZ);\nINSERT INTO public.records (id,value,label,source,ingested_at) VALUES ($1,$2,$3,$4,$5::timestamptz) ON CONFLICT (id) DO UPDATE SET value=EXCLUDED.value,label=EXCLUDED.label,ingested_at=EXCLUDED.ingested_at;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.id, $json.value, $json.label, $json.source, $json.ingested_at] }}"
+        }
+      },
+      "id": "postgres-load",
+      "name": "PostgreSQL - Upsert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        752,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const count=$input.all().length;\nreturn [{json:{message:\"*ETL run complete* — \"+count+\" record(s) upserted at \"+$now.toFormat(\"yyyy-MM-dd HH:mm\")+\" UTC.\"}}];"
+      },
+      "id": "set-summary",
+      "name": "Code Node - Build Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-notify",
+      "name": "Telegram - Notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        304
+      ],
+      "webhookId": "d0e1c616-f48a-4e4d-a3ab-2ca52b4478d5",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        80,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=*ETL failed*\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.error.message }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-error",
+      "name": "Telegram - Alert on Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        304,
+        512
+      ],
+      "webhookId": "3f088515-d248-4aa2-ab5a-04b4cb816145",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Extract": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Transform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Transform": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL - Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL - Upsert": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Alert on Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [],
+  "meta": {
+    "savedAt": "2026-03-26",
+    "instance": "YOUR_INSTANCE.app.n8n.cloud"
+  }
+}

@@ -1,0 +1,760 @@
+{
+  "name": "WF6 - MLOps Pipeline Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.ml_runs\n  (id SERIAL PRIMARY KEY, run_id TEXT, status TEXT, accuracy NUMERIC, created_at TIMESTAMPTZ DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS public.ml_watermark\n  (id INT PRIMARY KEY DEFAULT 1, last_run_id TEXT, updated_at TIMESTAMPTZ);\nINSERT INTO public.ml_watermark (id, last_run_id, updated_at) VALUES (1, '', NOW())\n  ON CONFLICT (id) DO NOTHING;\nSELECT last_run_id, updated_at as watermark FROM public.ml_watermark WHERE id = 1;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      },
+      "id": "node-2",
+      "name": "Read Watermark",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dagshub.com/your-dagshub-username/mlops-tracking.mlflow/api/2.0/mlflow/runs/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "experiment_id",
+              "value": "0"
+            },
+            {
+              "name": "start_time",
+              "value": "={{ Date.now() }}"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "id": "node-3",
+      "name": "HTTP POST — Trigger Training Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "udBOlzlwV59QpYmw",
+          "name": "DagsHub MLflow Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "run_id",
+              "value": "={{ $json.run.info.run_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "node-4",
+      "name": "Set Node — Store run_id",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "node-5",
+      "name": "Wait 60s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dagshub.com/your-dagshub-username/mlops-tracking.mlflow/api/2.0/mlflow/runs/get?run_id={{ $('Set Node — Store run_id').item.json.run_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "id": "node-6",
+      "name": "HTTP GET — Poll Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "udBOlzlwV59QpYmw",
+          "name": "DagsHub MLflow Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "RUNNING",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.run.info.status }}",
+                    "rightValue": "RUNNING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "FINISHED",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.run.info.status }}",
+                    "rightValue": "FINISHED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "FAILED",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.run.info.status }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-7",
+      "name": "Switch — Job State",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dagshub.com/your-dagshub-username/mlops-tracking.mlflow/api/2.0/mlflow/runs/get?run_id={{ $('Set Node — Store run_id').item.json.run_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "id": "node-8",
+      "name": "HTTP GET — Fetch Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1780,
+        180
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "udBOlzlwV59QpYmw",
+          "name": "DagsHub MLflow Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "deploy",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.run.data.metrics.accuracy }}",
+                    "rightValue": 0.92,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "review",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.run.data.metrics.accuracy }}",
+                    "rightValue": 0.85,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "retrain",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.run.data.metrics.accuracy }}",
+                    "rightValue": 0.85,
+                    "operator": {
+                      "type": "number",
+                      "operation": "lt"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-9",
+      "name": "Switch — Metric Threshold",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2000,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=❌ Training job FAILED\nRun ID: {{ $('Set Node — Store run_id').item.json.run_id }}\nTime: {{ $now }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      },
+      "id": "node-10",
+      "name": "Telegram — Failure Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1780,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.ml_runs (id SERIAL PRIMARY KEY, run_id TEXT, status TEXT, accuracy NUMERIC, created_at TIMESTAMPTZ DEFAULT NOW());\n=INSERT INTO ml_runs (run_id, status, created_at) VALUES ('{{ $('Set Node — Store run_id').item.json.run_id }}', 'failed', NOW())"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      },
+      "id": "node-11",
+      "name": "PostgreSQL — Log Failed Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dagshub.com/your-dagshub-username/mlops-tracking.mlflow/api/2.0/mlflow/registered-models/create",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "production-model"
+            },
+            {
+              "name": "run_id",
+              "value": "={{ $('Set Node — Store run_id').item.json.run_id }}"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "id": "node-12",
+      "name": "HTTP POST — Register to MLflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2220,
+        60
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "udBOlzlwV59QpYmw",
+          "name": "DagsHub MLflow Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://dagshub.com/your-dagshub-username/mlops-tracking.mlflow/api/2.0/mlflow/model-versions/update",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "production-model"
+            },
+            {
+              "name": "stage",
+              "value": "Production"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "id": "node-13",
+      "name": "HTTP PATCH — Tag Production",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2440,
+        60
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "udBOlzlwV59QpYmw",
+          "name": "DagsHub MLflow Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=✅ Model deployed to production!\nRun ID: {{ $('Set Node — Store run_id').item.json.run_id }}\nAccuracy: {{ $('HTTP GET — Fetch Metrics').item.json.run.data.metrics.accuracy }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      },
+      "id": "node-14",
+      "name": "Telegram — Model Ready Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2660,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=⚠️ Model needs review.\nRun ID: {{ $('Set Node — Store run_id').item.json.run_id }}\nAccuracy: {{ $('HTTP GET — Fetch Metrics').item.json.run.data.metrics.accuracy }} (threshold: 0.85–0.92)"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      },
+      "id": "node-15",
+      "name": "Telegram — Review Needed",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.ml_runs (id SERIAL PRIMARY KEY, run_id TEXT, status TEXT, accuracy NUMERIC, created_at TIMESTAMPTZ DEFAULT NOW());\n=INSERT INTO ml_runs (run_id, status, accuracy, created_at) VALUES ('{{ $('Set Node — Store run_id').item.json.run_id }}', 'review', {{ $('HTTP GET — Fetch Metrics').item.json.run.data.metrics.accuracy }}, NOW())"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      },
+      "id": "node-16",
+      "name": "PostgreSQL — Log Run (review)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=🔁 Model below threshold — retraining required.\nRun ID: {{ $('Set Node — Store run_id').item.json.run_id }}\nAccuracy: {{ $('HTTP GET — Fetch Metrics').item.json.run.data.metrics.accuracy }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account 5"
+        }
+      },
+      "id": "node-17",
+      "name": "Telegram — Retrain Required",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2220,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.retraining_queue (id SERIAL PRIMARY KEY, run_id TEXT, accuracy NUMERIC, queued_at TIMESTAMPTZ DEFAULT NOW());\n=INSERT INTO retraining_queue (run_id, accuracy, queued_at) VALUES ('{{ $('Set Node — Store run_id').item.json.run_id }}', {{ $('HTTP GET — Fetch Metrics').item.json.run.data.metrics.accuracy }}, NOW())"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      },
+      "id": "node-18",
+      "name": "PostgreSQL — Insert Retraining Queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2440,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.ml_watermark (id INT PRIMARY KEY DEFAULT 1, last_run_id TEXT, updated_at TIMESTAMPTZ);\nINSERT INTO public.ml_watermark (id, last_run_id, updated_at) VALUES (1, '', NOW()) ON CONFLICT (id) DO NOTHING;\n=UPDATE ml_watermark SET last_run_id = '{{ $('Set Node — Store run_id').item.json.run_id }}', updated_at = NOW()"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      },
+      "id": "node-19",
+      "name": "PostgreSQL — Update Watermark",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2880,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Watermark": {
+      "main": [
+        [
+          {
+            "node": "HTTP POST — Trigger Training Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP POST — Trigger Training Job": {
+      "main": [
+        [
+          {
+            "node": "Set Node — Store run_id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Node — Store run_id": {
+      "main": [
+        [
+          {
+            "node": "Wait 60s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 60s": {
+      "main": [
+        [
+          {
+            "node": "HTTP GET — Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP GET — Poll Job Status": {
+      "main": [
+        [
+          {
+            "node": "Switch — Job State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch — Job State": {
+      "main": [
+        [
+          {
+            "node": "Wait 60s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP GET — Fetch Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram — Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP GET — Fetch Metrics": {
+      "main": [
+        [
+          {
+            "node": "Switch — Metric Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch — Metric Threshold": {
+      "main": [
+        [
+          {
+            "node": "HTTP POST — Register to MLflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram — Review Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram — Retrain Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram — Failure Alert": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Log Failed Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP POST — Register to MLflow": {
+      "main": [
+        [
+          {
+            "node": "HTTP PATCH — Tag Production",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP PATCH — Tag Production": {
+      "main": [
+        [
+          {
+            "node": "Telegram — Model Ready Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram — Model Ready Alert": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Update Watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram — Review Needed": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Log Run (review)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL — Log Run (review)": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Update Watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram — Retrain Required": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Insert Retraining Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL — Insert Retraining Queue": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Update Watermark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": null,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "tags": [],
+  "meta": {
+    "savedAt": "2026-03-26",
+    "instance": "YOUR_INSTANCE.app.n8n.cloud"
+  }
+}

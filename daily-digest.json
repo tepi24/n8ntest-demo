@@ -1,0 +1,404 @@
+{
+  "name": "Daily Research Paper Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 8AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://export.arxiv.org/api/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search_query",
+              "value": "cat:cs.CL+OR+cat:cs.IR+AND+abs:RAG+OR+abs:retrieval+augmented+generation"
+            },
+            {
+              "name": "sortBy",
+              "value": "submittedDate"
+            },
+            {
+              "name": "sortOrder",
+              "value": "descending"
+            },
+            {
+              "name": "max_results",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "fetch-arxiv",
+      "name": "Fetch arXiv Papers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        96
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first();\nif (res.json.error || !res.json.data) {\n  throw new Error(`arXiv fetch failed: ${JSON.stringify(res.json)}`);\n}\nreturn $input.all();"
+      },
+      "id": "check-arxiv-response",
+      "name": "Check arXiv Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-papers-exist",
+              "leftValue": "={{ $json.data }}",
+              "rightValue": "<entry>",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-results",
+      "name": "Has Papers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "parse-xml",
+      "name": "Parse XML",
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const feed = $input.first().json.feed;\nconst entries = Array.isArray(feed.entry) ? feed.entry : [feed.entry].filter(Boolean);\nif (!entries.length) throw new Error('No entries found in parsed XML feed');\nconst papers = entries.map((entry, index) => {\n  const title = (Array.isArray(entry.title) ? entry.title[0] : entry.title || '').replace(/\\s+/g, ' ').trim();\n  const summary = (Array.isArray(entry.summary) ? entry.summary[0] : entry.summary || '').replace(/\\s+/g, ' ').trim();\n  const published = Array.isArray(entry.published) ? entry.published[0] : entry.published || '';\n  const authorList = Array.isArray(entry.author) ? entry.author : [entry.author].filter(Boolean);\n  const authors = authorList.map(a => (Array.isArray(a.name) ? a.name[0] : a.name) || '').join(', ');\n  const links = Array.isArray(entry.link) ? entry.link : [entry.link].filter(Boolean);\n  const absLink = links.find(l => l && l.$ && l.$.type === 'text/html');\n  const link = absLink ? absLink.$.href : (links[0] && links[0].$ ? links[0].$.href : '');\n  const primaryCat = entry['arxiv:primary_category'];\n  const category = primaryCat && primaryCat[0] && primaryCat[0].$ ? primaryCat[0].$.term : 'cs.CL';\n  return { index: index + 1, title, authors, summary, link, published, category };\n});\nreturn papers.map(p => ({ json: p }));"
+      },
+      "id": "parse-papers",
+      "name": "Parse Paper Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "aggregate-papers",
+      "name": "Aggregate All Papers",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const papers = $input.first().json.papers;\nconst paperList = papers.map(p =>\n  `### Paper ${p.index}: ${p.title}\\n**Authors:** ${p.authors}\\n**Link:** ${p.link}\\n**Abstract:** ${p.summary}\\n`\n).join('\\n---\\n');\nconst prompt = `You are a research assistant creating a daily paper digest. Below are ${papers.length} recent papers from arXiv. For each paper, provide:\\n\\n1. **One-line summary** (plain language, what they did and why it matters)\\n2. **Key contribution** (the novel idea or method)\\n3. **Relevance score** (High / Medium / Low) for someone working on multilingual RAG systems\\n\\nAfter individual summaries, provide a \"Today's Highlights\" section with the top 3 most relevant papers and a brief explanation of emerging trends.\\n\\nFormat the output as a clean HTML email body with inline styles.\\n\\n---\\n\\n${paperList}`;\nreturn [{ json: { prompt, paperCount: papers.length, papers } }];"
+      },
+      "id": "build-prompt",
+      "name": "Build LLM Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"max_tokens\": 4096,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.prompt) }}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 120000,
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 5000
+        }
+      },
+      "id": "llm-summarize",
+      "name": "LLM Summarize (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1792,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GROQ_HEADER_AUTH_CREDENTIAL_ID",
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "Uses Groq account credential (groqApi). Free tier at console.groq.com"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nif (response.error) {\n  throw new Error(`Groq API error: ${response.error.message || JSON.stringify(response.error)}`);\n}\nif (!response.choices || !response.choices[0] || !response.choices[0].message || !response.choices[0].message.content) {\n  throw new Error(`Unexpected Groq response structure: ${JSON.stringify(response)}`);\n}\nconst content = response.choices[0].message.content;\nconst paperCount = $('Build LLM Prompt').first().json.paperCount;\nconst today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });\nconst emailHtml = `<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body style=\"font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333;\"><div style=\"background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; margin-bottom: 24px;\"><h1 style=\"color: white; margin: 0; font-size: 24px;\">Daily Research Digest</h1><p style=\"color: rgba(255,255,255,0.85); margin: 8px 0 0 0; font-size: 14px;\">${today} &middot; ${paperCount} papers reviewed</p></div><div style=\"background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px;\">${content}</div><div style=\"text-align: center; margin-top: 24px; padding: 16px; color: #94a3b8; font-size: 12px;\"><p>Generated by your n8n Paper Digest workflow &middot; Powered by Groq (Llama 3.3)</p><p>Search query: RAG / Retrieval-Augmented Generation (cs.CL, cs.IR)</p></div></body></html>`;\nreturn [{ json: { subject: `Paper Digest: ${paperCount} new papers — ${today}`, htmlBody: emailHtml, paperCount } }];"
+      },
+      "id": "format-email",
+      "name": "Format Email Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.htmlBody }}",
+        "options": {
+          "replyTo": "your-email@gmail.com"
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email Digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2240,
+        0
+      ],
+      "webhookId": "4747790d-8bfa-4b81-bea7-f64b68488e53",
+      "notes": "Set n8n variable DIGEST_EMAIL and configure SMTP credentials.",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1G0oGeL67ew7G7aU",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@gmail.com",
+        "subject": "Daily Paper Digest: No new papers today",
+        "emailType": "html",
+        "message": "<p>No new AI/ML papers matched today's search criteria. Check back tomorrow!</p>",
+        "options": {}
+      },
+      "id": "no-papers-email",
+      "name": "No Papers Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        896,
+        192
+      ],
+      "webhookId": "d08ad938-44ea-460a-9994-a3e322216e34",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1G0oGeL67ew7G7aU",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 8AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch arXiv Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch arXiv Papers": {
+      "main": [
+        [
+          {
+            "node": "Check arXiv Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check arXiv Response": {
+      "main": [
+        [
+          {
+            "node": "Has Papers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Papers?": {
+      "main": [
+        [
+          {
+            "node": "Parse XML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Papers Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse XML": {
+      "main": [
+        [
+          {
+            "node": "Parse Paper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Paper Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Papers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Papers": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Prompt": {
+      "main": [
+        [
+          {
+            "node": "LLM Summarize (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Summarize (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Format Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Body": {
+      "main": [
+        [
+          {
+            "node": "Send Email Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "tags": [],
+  "meta": {
+    "savedAt": "2026-03-26",
+    "instance": "YOUR_INSTANCE.app.n8n.cloud"
+  }
+}

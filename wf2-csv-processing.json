@@ -1,0 +1,168 @@
+{
+  "name": "WF2 - Batch CSV Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "csv-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Webhook - Receive CSV",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        300
+      ],
+      "webhookId": "csv-upload-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse CSV from webhook body\n// Accepts: POST with Content-Type: text/plain or application/json {csv: \"...\"}\nconst input = $input.first().json;\nconst body = input.body;\n\nlet csvText = '';\nif (typeof body === 'string') {\n  csvText = body;\n} else if (body && body.csv) {\n  csvText = body.csv;\n} else {\n  throw new Error('Send CSV as plain text body or JSON: {\"csv\": \"id,value,label\n1,100,test\"}');\n}\n\nconst lines = csvText.trim().split('\n').filter(l => l.trim());\nif (lines.length < 2) throw new Error('CSV must have header row + at least 1 data row');\n\nconst headers = lines[0].split(',').map(h => h.trim().toLowerCase());\nconst rows = [];\nfor (let i = 1; i < lines.length; i++) {\n  const vals = lines[i].split(',').map(v => v.trim());\n  const row = {};\n  headers.forEach((h, idx) => row[h] = vals[idx] ?? '');\n  rows.push({ json: row });\n}\nreturn rows;"
+      },
+      "id": "code-parse",
+      "name": "Code Node - Parse CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate all rows in a single pass\nconst rows = $input.all();\nconst valid = [];\nconst invalid = [];\nconst seen = new Set();\n\nfor (const row of rows) {\n  const d = row.json;\n  const rowNum = d._rowIndex;\n  const errors = [];\n\n  if (!d.id || String(d.id).trim() === '')   errors.push('missing id');\n  if (d.value === null || d.value === '' || isNaN(parseFloat(d.value))) errors.push('value not numeric');\n  if (!d.label || String(d.label).trim() === '') errors.push('missing label');\n  if (d.id && seen.has(String(d.id))) errors.push('duplicate id');\n\n  if (errors.length > 0) {\n    invalid.push({ row: rowNum, id: d.id ?? null, errors });\n  } else {\n    seen.add(String(d.id));\n    valid.push({\n      json: {\n        id: String(d.id).trim(),\n        value: parseFloat(d.value),\n        label: String(d.label).trim(),\n        source: 'csv-upload',\n        ingested_at: $now.toISO()\n      }\n    });\n  }\n}\n\nif (valid.length > 0) {\n  valid[0].json._summary = {\n    total: rows.length,\n    passed: valid.length,\n    failed: invalid.length,\n    invalidRows: invalid\n  };\n}\n\nif (valid.length === 0) {\n  throw new Error(`All ${rows.length} rows failed validation: ` + JSON.stringify(invalid));\n}\n\nreturn valid;"
+      },
+      "id": "code-validate",
+      "name": "Code Node - Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.research_data (id, value, label, source, ingested_at)\nVALUES ($1, $2, $3, $4, $5::timestamptz)\nON CONFLICT (id) DO NOTHING;",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.id, $json.value, $json.label, $json.source, $json.ingested_at] }}"
+        }
+      },
+      "id": "postgres-insert",
+      "name": "PostgreSQL - Bulk Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        740,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull summary from first item and build report\nconst items = $input.all();\nconst summary = items[0]?.json?._summary ?? {\n  total: items.length,\n  passed: items.length,\n  failed: 0,\n  invalidRows: []\n};\n\nreturn [{\n  json: {\n    report: {\n      inserted: summary.passed,\n      skipped: summary.failed,\n      total: summary.total,\n      invalid_rows: summary.invalidRows,\n      timestamp: $now.toISO()\n    }\n  }\n}];"
+      },
+      "id": "set-report",
+      "name": "Code Node - Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.report, null, 2) }}"
+      },
+      "id": "form-response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1180,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Receive CSV": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Parse CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Parse CSV": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Validate": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL - Bulk Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL - Bulk Insert": {
+      "main": [
+        [
+          {
+            "node": "Code Node - Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Node - Build Report": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": null,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "tags": [],
+  "meta": {
+    "savedAt": "2026-03-26",
+    "instance": "YOUR_INSTANCE.app.n8n.cloud"
+  }
+}

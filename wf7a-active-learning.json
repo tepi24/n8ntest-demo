@@ -1,0 +1,189 @@
+{
+  "name": "WF7a - Active Learning Sampler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 2 }]
+        }
+      },
+      "id": "node-1",
+      "name": "Schedule - Every 2h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.paper_labels (\n  paper_id TEXT PRIMARY KEY,\n  label TEXT,\n  confidence FLOAT,\n  source TEXT,\n  groq_reason TEXT,\n  labeled_at TIMESTAMPTZ DEFAULT NOW()\n);\nSELECT rp.paper_id, rp.title, rp.abstract, rp.source\nFROM public.research_papers rp\nLEFT JOIN public.paper_labels pl ON rp.paper_id = pl.paper_id\nWHERE pl.paper_id IS NULL\n  AND length(rp.abstract) > 50\n  AND length(rp.title) > 5\nORDER BY rp.created_at DESC\nLIMIT 5;",
+        "options": {}
+      },
+      "id": "node-2",
+      "name": "PostgreSQL - Init & Fetch unlabeled",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [464, 320],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Classify each paper with Groq — async fetch keeps paper metadata in scope\nconst items = $input.all();\nconst GROQ_KEY = 'YOUR_GROQ_API_KEY';\nconst results = [];\n\nfor (const item of items) {\n  let groqLabel = 'uncertain', confidence = 0.5, groqReason = 'n/a';\n  try {\n    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {\n      method: 'POST',\n      headers: {\n        'Authorization': 'Bearer ' + GROQ_KEY,\n        'Content-Type': 'application/json'\n      },\n      body: JSON.stringify({\n        model: 'llama-3.3-70b-versatile',\n        temperature: 0.1,\n        max_tokens: 120,\n        messages: [\n          {\n            role: 'system',\n            content: 'Classify research papers for Cambodia National AI Strategy 2025-2030. Reply ONLY with valid JSON (no markdown, no explanation): {\"label\":\"relevant|irrelevant|uncertain\",\"confidence\":0.0-1.0,\"reason\":\"max 10 words\"}'\n          },\n          {\n            role: 'user',\n            content: 'Title: ' + item.json.title + '\\n\\nAbstract: ' + (item.json.abstract || '').substring(0, 500)\n          }\n        ]\n      })\n    });\n    const data = await resp.json();\n    const raw = data.choices[0].message.content.trim().replace(/```json|```/g, '').trim();\n    const parsed = JSON.parse(raw);\n    groqLabel = ['relevant', 'irrelevant', 'uncertain'].includes(parsed.label) ? parsed.label : 'uncertain';\n    confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0.5));\n    groqReason = (parsed.reason || '').substring(0, 80);\n  } catch (e) {\n    groqReason = 'error: ' + String(e.message || '').substring(0, 40);\n  }\n\n  results.push({ json: {\n    paper_id: item.json.paper_id,\n    title: item.json.title,\n    abstract: item.json.abstract,\n    source: item.json.source,\n    groq_label: groqLabel,\n    confidence,\n    groq_reason: groqReason\n  }});\n}\nreturn results;"
+      },
+      "id": "node-3",
+      "name": "Code - Classify with Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [688, 320]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.confidence }}",
+                    "rightValue": 0.80,
+                    "operator": { "type": "number", "operation": "gte" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Auto-label"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.confidence }}",
+                    "rightValue": 0.80,
+                    "operator": { "type": "number", "operation": "lt" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Human-review"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-4",
+      "name": "Switch - Confidence Gate",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [912, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.paper_labels (paper_id, label, confidence, source, groq_reason)\nVALUES ($1, $2, $3, 'auto', $4)\nON CONFLICT (paper_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$json.paper_id, $json.groq_label, $json.confidence, $json.groq_reason] }}"
+        }
+      },
+      "id": "node-5",
+      "name": "PostgreSQL - Save auto-label",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1136, 160],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres account" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=🤖 <b>Auto-labeled</b> ({{ Math.round($json.confidence * 100) }}% conf)\n<b>{{ ($json.groq_label || '').toUpperCase() }}</b> — {{ $json.groq_reason }}\n📄 <code>{{ ($json.title || '').substring(0, 80) }}</code>",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "node-6",
+      "name": "Telegram - Auto-label notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1360, 160],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram account 5" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Telegram HTML message with clickable label links\nconst item = $input.first().json;\nconst BASE = 'https://YOUR_INSTANCE.app.n8n.cloud/webhook/hitl-label';\nconst pid  = encodeURIComponent(item.paper_id);\nconst pct  = Math.round((item.confidence || 0) * 100);\nconst esc  = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst title    = esc((item.title    || '').substring(0, 120));\nconst reason   = esc((item.groq_reason || ''));\nconst abstract = esc((item.abstract || '').substring(0, 260));\n\nconst text = [\n  '🔬 <b>Paper Review Request</b>',\n  '',\n  `<b>Title:</b> ${title}`,\n  `<b>Source:</b> ${esc(item.source || '?')}  |  <b>AI Confidence:</b> ${pct}%`,\n  `<b>AI Guess:</b> ${esc(item.groq_label)}  —  <i>${reason}</i>`,\n  '',\n  `<b>Abstract:</b>\\n${abstract}…`,\n  '',\n  '<b>▸ Tap to label:</b>',\n  `✅ <a href=\"${BASE}?paper_id=${pid}&label=relevant\">Relevant</a>   ❌ <a href=\"${BASE}?paper_id=${pid}&label=irrelevant\">Not Relevant</a>   🤔 <a href=\"${BASE}?paper_id=${pid}&label=uncertain\">Uncertain</a>`\n].join('\\n');\n\nreturn [{ json: { text, paper_id: item.paper_id, confidence: item.confidence, groq_label: item.groq_label, groq_reason: item.groq_reason } }];"
+      },
+      "id": "node-7",
+      "name": "Code - Build HITL Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1136, 480]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "node-8",
+      "name": "Telegram - Send review request",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1360, 480],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram account 5" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.paper_labels (paper_id, label, confidence, source, groq_reason)\nVALUES ($1, 'pending', $2, 'pending', $3)\nON CONFLICT (paper_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$json.paper_id, $json.confidence, $json.groq_reason] }}"
+        }
+      },
+      "id": "node-9",
+      "name": "PostgreSQL - Save pending label",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1584, 480],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "Postgres account" }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule - Every 2h": {
+      "main": [[{ "node": "PostgreSQL - Init & Fetch unlabeled", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL - Init & Fetch unlabeled": {
+      "main": [[{ "node": "Code - Classify with Groq", "type": "main", "index": 0 }]]
+    },
+    "Code - Classify with Groq": {
+      "main": [[{ "node": "Switch - Confidence Gate", "type": "main", "index": 0 }]]
+    },
+    "Switch - Confidence Gate": {
+      "main": [
+        [{ "node": "PostgreSQL - Save auto-label", "type": "main", "index": 0 }],
+        [{ "node": "Code - Build HITL Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "PostgreSQL - Save auto-label": {
+      "main": [[{ "node": "Telegram - Auto-label notify", "type": "main", "index": 0 }]]
+    },
+    "Code - Build HITL Message": {
+      "main": [[{ "node": "Telegram - Send review request", "type": "main", "index": 0 }]]
+    },
+    "Telegram - Send review request": {
+      "main": [[{ "node": "PostgreSQL - Save pending label", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [],
+  "meta": { "savedAt": "2026-03-26", "instance": "YOUR_INSTANCE.app.n8n.cloud" }
+}
