@@ -247,7 +247,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer YOUR_JINA_API_KEY_PREFIX36944923a35a62f3bab05641vdOFm-ZCL3e9R_15V0v8XCJFtLpA"
+              "value": "Bearer YOUR_JINA_API_KEY"
             },
             {
               "name": "Content-Type",
