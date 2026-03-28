@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-03-28T00:44:39.313Z",
+  "updatedAt": "2026-03-28T00:54:43.056Z",
   "createdAt": "2026-03-25T09:08:42.416Z",
   "id": "YOUR_WF5_WORKFLOW_ID",
   "name": "WF5 - Research Data Collection (Production Pipeline)",
@@ -102,7 +102,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        1020,
+        1024,
         128
       ],
       "continueOnFail": true
@@ -142,8 +142,8 @@
         912,
         416
       ],
-      "onError": "continueRegularOutput",
-      "continueOnFail": true
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -157,8 +157,8 @@
         1136,
         416
       ],
-      "onError": "continueRegularOutput",
-      "continueOnFail": true
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -173,8 +173,8 @@
         912,
         608
       ],
-      "onError": "continueRegularOutput",
-      "continueOnFail": true
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -188,8 +188,8 @@
         1136,
         608
       ],
-      "onError": "continueRegularOutput",
-      "continueOnFail": true
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {},
@@ -339,7 +339,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\n\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = (p.json.title    || '(no title)').substring(0, 100);\n  const source   =  p.json.source   || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? abstract + '...' : '';\n  const url      =  p.json.url || '';\n  return `${i+1}. *${title}*\n   ${source} | ${date}\n   ${snippet}\n   ${url}`.trim();\n}).join('\n\n');\n\nconst digest = `Daily Research Digest - ${new Date().toDateString()}\n\nPapers collected: ${count}\n\nTop picks:\n\n${topPapers}\n\nSources: arXiv, Semantic Scholar, PubMed`;\n\nreturn [{json: {count, digest}}];"
+        "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\n\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = (p.json.title    || '(no title)').substring(0, 100);\n  const source   =  p.json.source   || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? abstract + '...' : '';\n  const url      =  p.json.url || '';\n  return `${i+1}. *${title}*\n   ${source} | ${date}\n   ${snippet}\n   ${url}`.trim();\n}).join('\\n\\n');\n\n\nconst digest = `Daily Research Digest - ${new Date().toDateString()}\n\nPapers collected: ${count}\n\nTop picks:\n\n${topPapers}\n\nSources: arXiv, Semantic Scholar, PubMed`;\n\nreturn [{json: {count, digest}}];"
       },
       "id": "node-17",
       "name": "Set Node - Build digest message",
@@ -407,9 +407,7 @@
     },
     {
       "parameters": {
-        "resume": "timeInterval",
-        "amount": 4,
-        "unit": "seconds"
+        "amount": 4
       },
       "id": "wait-arxiv",
       "name": "Wait - arXiv rate limit",
@@ -658,9 +656,9 @@
   },
   "meta": null,
   "pinData": {},
-  "versionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
+  "versionId": "8bf611c7-759b-4442-8101-ae76affa1ba6",
   "activeVersionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
-  "versionCounter": 119,
+  "versionCounter": 121,
   "triggerCount": 1,
   "shared": [
     {
