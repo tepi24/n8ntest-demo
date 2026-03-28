@@ -1,7 +1,7 @@
 {
   "updatedAt": "2026-03-27T08:35:49.519Z",
   "createdAt": "2026-03-25T07:01:02.127Z",
-  "id": "3C6pFAQBsfKU5Jz6",
+  "id": "YOUR_CREDENTIAL_ID",
   "name": "WF3 - Sentiment Analysis with Intelligent Routing",
   "description": null,
   "active": true,
@@ -374,12 +374,12 @@
       "updatedAt": "2026-03-25T07:07:47.381Z",
       "createdAt": "2026-03-25T07:07:47.381Z",
       "role": "workflow:owner",
-      "workflowId": "3C6pFAQBsfKU5Jz6",
-      "projectId": "fT5Mwi0SbGxF6NQW",
+      "workflowId": "YOUR_WF3_WORKFLOW_ID",
+      "projectId": "YOUR_N8N_PROJECT_ID",
       "project": {
         "updatedAt": "2025-11-16T01:32:20.279Z",
         "createdAt": "2025-11-16T01:32:20.279Z",
-        "id": "fT5Mwi0SbGxF6NQW",
+        "id": "YOUR_CREDENTIAL_ID",
         "name": "My project",
         "type": "team",
         "icon": {
@@ -396,7 +396,7 @@
     "updatedAt": "2026-03-27T08:35:49.520Z",
     "createdAt": "2026-03-27T08:35:49.520Z",
     "versionId": "33a897e0-4bf5-44bc-b487-d95ce98de5a2",
-    "workflowId": "3C6pFAQBsfKU5Jz6",
+    "workflowId": "YOUR_WF3_WORKFLOW_ID",
     "nodes": [
       {
         "parameters": {
@@ -755,7 +755,7 @@
       {
         "createdAt": "2026-03-27T08:35:49.807Z",
         "id": 146,
-        "workflowId": "3C6pFAQBsfKU5Jz6",
+        "workflowId": "YOUR_WF3_WORKFLOW_ID",
         "versionId": "33a897e0-4bf5-44bc-b487-d95ce98de5a2",
         "event": "activated",
         "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
@@ -763,7 +763,7 @@
       {
         "createdAt": "2026-03-27T08:35:49.658Z",
         "id": 145,
-        "workflowId": "3C6pFAQBsfKU5Jz6",
+        "workflowId": "YOUR_WF3_WORKFLOW_ID",
         "versionId": "33a897e0-4bf5-44bc-b487-d95ce98de5a2",
         "event": "deactivated",
         "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"

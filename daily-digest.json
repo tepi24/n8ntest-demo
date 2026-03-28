@@ -234,11 +234,11 @@
         2240,
         0
       ],
-      "webhookId": "4747790d-8bfa-4b81-bea7-f64b68488e53",
+      "webhookId": "YOUR_WEBHOOK_ID_1",
       "notes": "Set n8n variable DIGEST_EMAIL and configure SMTP credentials.",
       "credentials": {
         "gmailOAuth2": {
-          "id": "1G0oGeL67ew7G7aU",
+          "id": "YOUR_CREDENTIAL_ID",
           "name": "Gmail account"
         }
       }
@@ -259,10 +259,10 @@
         896,
         192
       ],
-      "webhookId": "d08ad938-44ea-460a-9994-a3e322216e34",
+      "webhookId": "YOUR_WEBHOOK_ID_2",
       "credentials": {
         "gmailOAuth2": {
-          "id": "1G0oGeL67ew7G7aU",
+          "id": "YOUR_CREDENTIAL_ID",
           "name": "Gmail account"
         }
       }

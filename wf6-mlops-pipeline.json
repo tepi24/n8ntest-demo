@@ -80,7 +80,7 @@
       ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "udBOlzlwV59QpYmw",
+          "id": "YOUR_DAGSHUB_CREDENTIAL_ID",
           "name": "DagsHub MLflow Auth"
         }
       }
@@ -137,7 +137,7 @@
       ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "udBOlzlwV59QpYmw",
+          "id": "YOUR_DAGSHUB_CREDENTIAL_ID",
           "name": "DagsHub MLflow Auth"
         }
       }
@@ -230,7 +230,7 @@
       ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "udBOlzlwV59QpYmw",
+          "id": "YOUR_DAGSHUB_CREDENTIAL_ID",
           "name": "DagsHub MLflow Auth"
         }
       }
@@ -367,7 +367,7 @@
       ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "udBOlzlwV59QpYmw",
+          "id": "YOUR_DAGSHUB_CREDENTIAL_ID",
           "name": "DagsHub MLflow Auth"
         }
       }
@@ -402,7 +402,7 @@
       ],
       "credentials": {
         "httpBasicAuth": {
-          "id": "udBOlzlwV59QpYmw",
+          "id": "YOUR_DAGSHUB_CREDENTIAL_ID",
           "name": "DagsHub MLflow Auth"
         }
       }

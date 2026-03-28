@@ -121,7 +121,7 @@
         1184,
         304
       ],
-      "webhookId": "d0e1c616-f48a-4e4d-a3ab-2ca52b4478d5",
+      "webhookId": "YOUR_WEBHOOK_ID_3",
       "credentials": {
         "telegramApi": {
           "id": "TELEGRAM_CREDENTIAL_ID",
@@ -156,7 +156,7 @@
         304,
         512
       ],
-      "webhookId": "3f088515-d248-4aa2-ab5a-04b4cb816145",
+      "webhookId": "YOUR_WEBHOOK_ID_4",
       "credentials": {
         "telegramApi": {
           "id": "TELEGRAM_CREDENTIAL_ID",
