@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-03-28T00:37:35.758Z",
+  "updatedAt": "2026-03-28T00:44:39.313Z",
   "createdAt": "2026-03-25T09:08:42.416Z",
   "id": "YOUR_WF5_WORKFLOW_ID",
   "name": "WF5 - Research Data Collection (Production Pipeline)",
@@ -288,7 +288,6 @@
         2256,
         256
       ],
-      "disabled": true,
       "continueOnFail": true
     },
     {
@@ -340,7 +339,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = p.json.title || '(no title)';\n  const source   = p.json.source || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? '\\n   ' + abstract + '…' : '';\n  const urlLine  = p.json.url ? '\\n   ' + p.json.url : '';\n  return (i+1) + '. ' + title + '\\n   ' + source + ' | ' + date + snippet + urlLine;\n}).join('\\n\\n');\nreturn [{json: {count, digest:\n  'Daily Research Digest - ' + new Date().toDateString() +\n  '\\n\\nNew papers collected: ' + count +\n  '\\n\\nTop picks:\\n\\n' + topPapers +\n  '\\n\\nSources: arXiv, Semantic Scholar, PubMed'\n}}];\n"
+        "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\n\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = (p.json.title    || '(no title)').substring(0, 100);\n  const source   =  p.json.source   || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? abstract + '...' : '';\n  const url      =  p.json.url || '';\n  return `${i+1}. *${title}*\n   ${source} | ${date}\n   ${snippet}\n   ${url}`.trim();\n}).join('\n\n');\n\nconst digest = `Daily Research Digest - ${new Date().toDateString()}\n\nPapers collected: ${count}\n\nTop picks:\n\n${topPapers}\n\nSources: arXiv, Semantic Scholar, PubMed`;\n\nreturn [{json: {count, digest}}];"
       },
       "id": "node-17",
       "name": "Set Node - Build digest message",
@@ -354,7 +353,7 @@
     {
       "parameters": {
         "chatId": "YOUR_TELEGRAM_CHAT_ID",
-        "text": "={{ $json.digest }}",
+        "text": "={{ $('Set Node - Build digest message').item.json.digest }}",
         "additionalFields": {}
       },
       "id": "node-18",
@@ -659,9 +658,9 @@
   },
   "meta": null,
   "pinData": {},
-  "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
-  "activeVersionId": "db7000a9-f769-494b-8b00-fa5129678406",
-  "versionCounter": 116,
+  "versionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
+  "activeVersionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
+  "versionCounter": 119,
   "triggerCount": 1,
   "shared": [
     {
@@ -687,9 +686,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-03-28T00:37:35.759Z",
-    "createdAt": "2026-03-28T00:37:35.759Z",
-    "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
+    "updatedAt": "2026-03-28T00:44:39.314Z",
+    "createdAt": "2026-03-28T00:44:39.314Z",
+    "versionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
     "workflowId": "YOUR_WF5_WORKFLOW_ID",
     "nodes": [
       {
@@ -973,7 +972,6 @@
           2256,
           256
         ],
-        "disabled": true,
         "continueOnFail": true
       },
       {
@@ -1025,7 +1023,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = p.json.title || '(no title)';\n  const source   = p.json.source || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? '\\n   ' + abstract + '…' : '';\n  const urlLine  = p.json.url ? '\\n   ' + p.json.url : '';\n  return (i+1) + '. ' + title + '\\n   ' + source + ' | ' + date + snippet + urlLine;\n}).join('\\n\\n');\nreturn [{json: {count, digest:\n  'Daily Research Digest - ' + new Date().toDateString() +\n  '\\n\\nNew papers collected: ' + count +\n  '\\n\\nTop picks:\\n\\n' + topPapers +\n  '\\n\\nSources: arXiv, Semantic Scholar, PubMed'\n}}];\n"
+          "jsCode": "const allPapers = $('Code Node - Deduplicate by ID').all();\nconst count = allPapers.length;\n\nconst topPapers = allPapers.slice(0, 5).map((p, i) => {\n  const title    = (p.json.title    || '(no title)').substring(0, 100);\n  const source   =  p.json.source   || '?';\n  const date     = (p.json.published_date || 'n/a').substring(0, 10);\n  const abstract = (p.json.abstract || '').trim().substring(0, 120);\n  const snippet  = abstract ? abstract + '...' : '';\n  const url      =  p.json.url || '';\n  return `${i+1}. *${title}*\n   ${source} | ${date}\n   ${snippet}\n   ${url}`.trim();\n}).join('\n\n');\n\nconst digest = `Daily Research Digest - ${new Date().toDateString()}\n\nPapers collected: ${count}\n\nTop picks:\n\n${topPapers}\n\nSources: arXiv, Semantic Scholar, PubMed`;\n\nreturn [{json: {count, digest}}];"
         },
         "id": "node-17",
         "name": "Set Node - Build digest message",
@@ -1039,7 +1037,7 @@
       {
         "parameters": {
           "chatId": "YOUR_TELEGRAM_CHAT_ID",
-          "text": "={{ $json.digest }}",
+          "text": "={{ $('Set Node - Build digest message').item.json.digest }}",
           "additionalFields": {}
         },
         "id": "node-18",
@@ -1336,18 +1334,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-03-28T00:37:35.955Z",
-        "id": 152,
+        "createdAt": "2026-03-28T00:44:39.509Z",
+        "id": 154,
         "workflowId": "YOUR_WF5_WORKFLOW_ID",
-        "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
+        "versionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
         "event": "activated",
         "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
       },
       {
-        "createdAt": "2026-03-28T00:37:35.867Z",
-        "id": 151,
+        "createdAt": "2026-03-28T00:44:39.421Z",
+        "id": 153,
         "workflowId": "YOUR_WF5_WORKFLOW_ID",
-        "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
+        "versionId": "bd0226d6-66fc-41ed-83fc-1e45e467d478",
         "event": "deactivated",
         "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
       }
