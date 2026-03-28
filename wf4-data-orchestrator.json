@@ -1,15 +1,13 @@
 {
+  "updatedAt": "2026-03-28T00:06:47.558Z",
+  "createdAt": "2026-03-25T07:01:03.288Z",
+  "id": "k2gJTSwgJUI1ihIK",
   "name": "WF4 - Neon Data Stack Orchestrator",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
-      "id": "schedule-trigger",
-      "name": "Schedule Trigger - Daily 2AM",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        80,
-        300
-      ],
       "parameters": {
         "rule": {
           "interval": [
@@ -19,93 +17,93 @@
             }
           ]
         }
-      }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger - Daily 2AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        496
+      ]
     },
     {
-      "id": "pg-daily-stats",
-      "name": "PostgreSQL - Daily Stats",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        300,
-        300
-      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT\n  COUNT(*) AS total_records,\n  COUNT(DISTINCT source) AS sources,\n  AVG(value::numeric) AS avg_value,\n  MIN(value::numeric) AS min_value,\n  MAX(value::numeric) AS max_value,\n  MAX(ingested_at) AS last_ingested\nFROM public.records\nWHERE ingested_at >= NOW() - INTERVAL '24 hours'",
         "options": {}
       },
+      "id": "pg-daily-stats",
+      "name": "PostgreSQL - Daily Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        304,
+        304
+      ],
       "credentials": {
         "postgres": {
-          "id": "POSTGRES_CREDENTIAL_ID",
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
           "name": "Postgres account"
         }
       }
     },
     {
-      "id": "pg-sentiment-stats",
-      "name": "PostgreSQL - Sentiment Stats",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        300,
-        460
-      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "CREATE TABLE IF NOT EXISTS public.sentiment_log (\n  id SERIAL PRIMARY KEY,\n  sentiment TEXT,\n  text TEXT,\n  created_at TIMESTAMPTZ DEFAULT NOW()\n);\nSELECT\n  sentiment,\n  COUNT(*) AS count\nFROM public.sentiment_log\nWHERE created_at >= NOW() - INTERVAL '24 hours'\nGROUP BY sentiment\nORDER BY count DESC;",
         "options": {}
       },
+      "id": "pg-sentiment-stats",
+      "name": "PostgreSQL - Sentiment Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        304,
+        496
+      ],
       "credentials": {
         "postgres": {
-          "id": "POSTGRES_CREDENTIAL_ID",
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
           "name": "Postgres account"
         }
       }
     },
     {
-      "id": "pg-research-stats",
-      "name": "PostgreSQL - Research Stats",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        300,
-        620
-      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT\n  COUNT(*) AS papers_collected,\n  COUNT(DISTINCT source) AS sources_active\nFROM public.research_papers\nWHERE created_at >= NOW() - INTERVAL '24 hours'",
         "options": {}
       },
+      "id": "pg-research-stats",
+      "name": "PostgreSQL - Research Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        304,
+        688
+      ],
       "credentials": {
         "postgres": {
-          "id": "POSTGRES_CREDENTIAL_ID",
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
           "name": "Postgres account"
         }
       }
     },
     {
+      "parameters": {
+        "jsCode": "// Safely collect results — nodes that returned 0 rows throw if called without try/catch\nlet etl = {};\ntry { etl = $('PostgreSQL - Daily Stats').first().json; } catch(e) { etl = {}; }\n\nlet sent = [];\ntry { sent = $('PostgreSQL - Sentiment Stats').all(); } catch(e) { sent = []; }\n\nlet res = {};\ntry { res = $('PostgreSQL - Research Stats').first().json; } catch(e) { res = {}; }\n\n// ETL summary\nconst etlLine = parseInt(etl.total_records || 0) > 0\n  ? `Records ingested: ${etl.total_records} | Sources: ${etl.sources} | Avg value: ${parseFloat(etl.avg_value||0).toFixed(2)}`\n  : 'No ETL records in last 24h';\n\n// Sentiment summary\nconst sentLines = sent.length > 0\n  ? sent.map(r => `  ${r.json.sentiment}: ${r.json.count}`).join('\n')\n  : '  No sentiment events in last 24h';\n\n// Research summary\nconst resLine = parseInt(res.papers_collected || 0) > 0\n  ? `Papers collected: ${res.papers_collected} | Sources: ${res.sources_active}`\n  : 'No research papers in last 24h';\n\nconst now = new Date().toISOString().slice(0,16).replace('T',' ');\n\nconst message = `*Nightly Data Stack Report* — ${now} UTC\n\n`\n  + `*ETL Pipeline (WF1)*\n${etlLine}\n\n`\n  + `*Sentiment Analysis (WF3)*\n${sentLines}\n\n`\n  + `*Research Collection (WF5)*\n${resLine}`;\n\nreturn [{ json: { message } }];"
+      },
       "id": "code-build-report",
       "name": "Code - Build Nightly Report",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        600,
-        300
-      ],
-      "parameters": {
-        "jsCode": "// Collect results from all 3 Postgres queries\nconst etl = $('PostgreSQL - Daily Stats').first().json;\nconst res = $('PostgreSQL - Research Stats').first().json;\n\n// Sentiment may return 0 rows — guard with try/catch\nlet sent = [];\ntry { sent = $('PostgreSQL - Sentiment Stats').all(); } catch(e) { sent = []; }\n\n\n// ETL summary\nconst etlLine = etl.total_records > 0\n  ? `Records ingested: ${etl.total_records} | Sources: ${etl.sources} | Avg value: ${parseFloat(etl.avg_value||0).toFixed(2)}`\n  : 'No ETL records in last 24h';\n\n// Sentiment summary\nconst sentLines = sent.length > 0\n  ? sent.map(r => `  ${r.json.sentiment}: ${r.json.count}`).join('\n')\n  : '  No sentiment events in last 24h';\n\n// Research summary\nconst resLine = res.papers_collected > 0\n  ? `Papers collected: ${res.papers_collected} | Sources: ${res.sources_active}`\n  : 'No research papers collected in last 24h';\n\nconst now = new Date().toISOString().slice(0,16).replace('T',' ');\n\nconst message = `*Nightly Data Stack Report* — ${now} UTC\n\n*ETL Pipeline (WF1)*\n${etlLine}\n\n*Sentiment Analysis (WF3)*\n${sentLines}\n\n*Research Collection (WF5)*\n${resLine}`;\n\nreturn [{ json: { message } }];"
-      }
+        528,
+        496
+      ]
     },
     {
-      "id": "telegram-report",
-      "name": "Telegram - Nightly Report",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        840,
-        300
-      ],
       "parameters": {
         "chatId": "YOUR_TELEGRAM_CHAT_ID",
         "text": "={{ $json.message }}",
@@ -113,33 +111,34 @@
           "parse_mode": "Markdown"
         }
       },
+      "id": "telegram-report",
+      "name": "Telegram - Nightly Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        752,
+        496
+      ],
+      "webhookId": "9f9433b2-fb0f-4c88-8bfe-8badfe639d76",
       "credentials": {
         "telegramApi": {
-          "id": "TELEGRAM_CREDENTIAL_ID",
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
           "name": "Telegram account 5"
         }
       }
     },
     {
+      "parameters": {},
       "id": "error-trigger",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
         80,
-        500
-      ],
-      "parameters": {}
+        912
+      ]
     },
     {
-      "id": "telegram-error",
-      "name": "Telegram - Error Alert",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        300,
-        800
-      ],
       "parameters": {
         "chatId": "YOUR_TELEGRAM_CHAT_ID",
         "text": "=*WF4 Orchestrator failed*\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}",
@@ -147,9 +146,18 @@
           "parse_mode": "Markdown"
         }
       },
+      "id": "telegram-error",
+      "name": "Telegram - Error Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        304,
+        912
+      ],
+      "webhookId": "4e20e423-fb64-4832-ba0f-da5174aabe7e",
       "credentials": {
         "telegramApi": {
-          "id": "TELEGRAM_CREDENTIAL_ID",
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
           "name": "Telegram account 5"
         }
       }
@@ -233,16 +241,307 @@
       ]
     }
   },
-  "pinData": null,
   "settings": {
     "executionOrder": "v1",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "binaryMode": "separate"
   },
-  "staticData": null,
+  "staticData": {
+    "node:Schedule Trigger - Daily 2AM": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "9f058af5-ec99-4df7-ba7d-d539b3daa141",
+  "activeVersionId": "9f058af5-ec99-4df7-ba7d-d539b3daa141",
+  "versionCounter": 15,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-25T07:07:47.384Z",
+      "createdAt": "2026-03-25T07:07:47.384Z",
+      "role": "workflow:owner",
+      "workflowId": "k2gJTSwgJUI1ihIK",
+      "projectId": "fT5Mwi0SbGxF6NQW",
+      "project": {
+        "updatedAt": "2025-11-16T01:32:20.279Z",
+        "createdAt": "2025-11-16T01:32:20.279Z",
+        "id": "fT5Mwi0SbGxF6NQW",
+        "name": "My project",
+        "type": "team",
+        "icon": {
+          "type": "icon",
+          "value": "layers"
+        },
+        "description": null,
+        "creatorId": null
+      }
+    }
+  ],
   "tags": [],
-  "meta": {
-    "savedAt": "2026-03-26",
-    "instance": "YOUR_INSTANCE.app.n8n.cloud"
+  "activeVersion": {
+    "updatedAt": "2026-03-28T00:06:47.559Z",
+    "createdAt": "2026-03-28T00:06:47.559Z",
+    "versionId": "9f058af5-ec99-4df7-ba7d-d539b3daa141",
+    "workflowId": "k2gJTSwgJUI1ihIK",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 2 * * *"
+              }
+            ]
+          }
+        },
+        "id": "schedule-trigger",
+        "name": "Schedule Trigger - Daily 2AM",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          80,
+          496
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  COUNT(*) AS total_records,\n  COUNT(DISTINCT source) AS sources,\n  AVG(value::numeric) AS avg_value,\n  MIN(value::numeric) AS min_value,\n  MAX(value::numeric) AS max_value,\n  MAX(ingested_at) AS last_ingested\nFROM public.records\nWHERE ingested_at >= NOW() - INTERVAL '24 hours'",
+          "options": {}
+        },
+        "id": "pg-daily-stats",
+        "name": "PostgreSQL - Daily Stats",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          304,
+          304
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "CREATE TABLE IF NOT EXISTS public.sentiment_log (\n  id SERIAL PRIMARY KEY,\n  sentiment TEXT,\n  text TEXT,\n  created_at TIMESTAMPTZ DEFAULT NOW()\n);\nSELECT\n  sentiment,\n  COUNT(*) AS count\nFROM public.sentiment_log\nWHERE created_at >= NOW() - INTERVAL '24 hours'\nGROUP BY sentiment\nORDER BY count DESC;",
+          "options": {}
+        },
+        "id": "pg-sentiment-stats",
+        "name": "PostgreSQL - Sentiment Stats",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          304,
+          496
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  COUNT(*) AS papers_collected,\n  COUNT(DISTINCT source) AS sources_active\nFROM public.research_papers\nWHERE created_at >= NOW() - INTERVAL '24 hours'",
+          "options": {}
+        },
+        "id": "pg-research-stats",
+        "name": "PostgreSQL - Research Stats",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          304,
+          688
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Safely collect results — nodes that returned 0 rows throw if called without try/catch\nlet etl = {};\ntry { etl = $('PostgreSQL - Daily Stats').first().json; } catch(e) { etl = {}; }\n\nlet sent = [];\ntry { sent = $('PostgreSQL - Sentiment Stats').all(); } catch(e) { sent = []; }\n\nlet res = {};\ntry { res = $('PostgreSQL - Research Stats').first().json; } catch(e) { res = {}; }\n\n// ETL summary\nconst etlLine = parseInt(etl.total_records || 0) > 0\n  ? `Records ingested: ${etl.total_records} | Sources: ${etl.sources} | Avg value: ${parseFloat(etl.avg_value||0).toFixed(2)}`\n  : 'No ETL records in last 24h';\n\n// Sentiment summary\nconst sentLines = sent.length > 0\n  ? sent.map(r => `  ${r.json.sentiment}: ${r.json.count}`).join('\n')\n  : '  No sentiment events in last 24h';\n\n// Research summary\nconst resLine = parseInt(res.papers_collected || 0) > 0\n  ? `Papers collected: ${res.papers_collected} | Sources: ${res.sources_active}`\n  : 'No research papers in last 24h';\n\nconst now = new Date().toISOString().slice(0,16).replace('T',' ');\n\nconst message = `*Nightly Data Stack Report* — ${now} UTC\n\n`\n  + `*ETL Pipeline (WF1)*\n${etlLine}\n\n`\n  + `*Sentiment Analysis (WF3)*\n${sentLines}\n\n`\n  + `*Research Collection (WF5)*\n${resLine}`;\n\nreturn [{ json: { message } }];"
+        },
+        "id": "code-build-report",
+        "name": "Code - Build Nightly Report",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          528,
+          496
+        ]
+      },
+      {
+        "parameters": {
+          "chatId": "YOUR_TELEGRAM_CHAT_ID",
+          "text": "={{ $json.message }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "telegram-report",
+        "name": "Telegram - Nightly Report",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          752,
+          496
+        ],
+        "webhookId": "9f9433b2-fb0f-4c88-8bfe-8badfe639d76",
+        "credentials": {
+          "telegramApi": {
+            "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+            "name": "Telegram account 5"
+          }
+        }
+      },
+      {
+        "parameters": {},
+        "id": "error-trigger",
+        "name": "Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          80,
+          912
+        ]
+      },
+      {
+        "parameters": {
+          "chatId": "YOUR_TELEGRAM_CHAT_ID",
+          "text": "=*WF4 Orchestrator failed*\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "telegram-error",
+        "name": "Telegram - Error Alert",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          304,
+          912
+        ],
+        "webhookId": "4e20e423-fb64-4832-ba0f-da5174aabe7e",
+        "credentials": {
+          "telegramApi": {
+            "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+            "name": "Telegram account 5"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Schedule Trigger - Daily 2AM": {
+        "main": [
+          [
+            {
+              "node": "PostgreSQL - Daily Stats",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "PostgreSQL - Sentiment Stats",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "PostgreSQL - Research Stats",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PostgreSQL - Daily Stats": {
+        "main": [
+          [
+            {
+              "node": "Code - Build Nightly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PostgreSQL - Sentiment Stats": {
+        "main": [
+          [
+            {
+              "node": "Code - Build Nightly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PostgreSQL - Research Stats": {
+        "main": [
+          [
+            {
+              "node": "Code - Build Nightly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code - Build Nightly Report": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Nightly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Error Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "cbnu  aiclab",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-03-28T00:06:47.983Z",
+        "id": 148,
+        "workflowId": "k2gJTSwgJUI1ihIK",
+        "versionId": "9f058af5-ec99-4df7-ba7d-d539b3daa141",
+        "event": "activated",
+        "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
+      },
+      {
+        "createdAt": "2026-03-28T00:06:47.865Z",
+        "id": 147,
+        "workflowId": "k2gJTSwgJUI1ihIK",
+        "versionId": "9f058af5-ec99-4df7-ba7d-d539b3daa141",
+        "event": "deactivated",
+        "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
+      }
+    ]
   }
 }
