@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-03-28T00:11:42.895Z",
+  "updatedAt": "2026-03-28T00:37:35.758Z",
   "createdAt": "2026-03-25T09:08:42.416Z",
-  "id": "YOUR_CREDENTIAL_ID",
+  "id": "YOUR_WF5_WORKFLOW_ID",
   "name": "WF5 - Research Data Collection (Production Pipeline)",
   "description": null,
   "active": true,
@@ -102,9 +102,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        912,
+        1020,
         128
-      ]
+      ],
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -117,7 +118,8 @@
       "position": [
         1136,
         128
-      ]
+      ],
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -140,7 +142,8 @@
         912,
         416
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -154,7 +157,8 @@
         1136,
         416
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -169,7 +173,8 @@
         912,
         608
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -183,7 +188,8 @@
         1136,
         608
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {},
@@ -282,6 +288,7 @@
         2256,
         256
       ],
+      "disabled": true,
       "continueOnFail": true
     },
     {
@@ -358,7 +365,7 @@
         2928,
         256
       ],
-      "webhookId": "YOUR_WEBHOOK_ID_7",
+      "webhookId": "YOUR_WEBHOOK_ID",
       "credentials": {
         "telegramApi": {
           "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -391,13 +398,29 @@
         464,
         832
       ],
-      "webhookId": "YOUR_WEBHOOK_ID_8",
+      "webhookId": "YOUR_WEBHOOK_ID",
       "credentials": {
         "telegramApi": {
           "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
           "name": "Telegram account 5"
         }
       }
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "id": "wait-arxiv",
+      "name": "Wait - arXiv rate limit",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        128
+      ],
+      "webhookId": "arxiv-wait"
     }
   ],
   "connections": {
@@ -444,7 +467,7 @@
       "main": [
         [
           {
-            "node": "HTTP Request - arXiv API",
+            "node": "Wait - arXiv rate limit",
             "type": "main",
             "index": 0
           }
@@ -609,6 +632,17 @@
           }
         ]
       ]
+    },
+    "Wait - arXiv rate limit": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - arXiv API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -625,9 +659,9 @@
   },
   "meta": null,
   "pinData": {},
-  "versionId": "c2614fb8-8c80-42b1-9dfd-f5fa48bb7a5b",
-  "activeVersionId": "c2614fb8-8c80-42b1-9dfd-f5fa48bb7a5b",
-  "versionCounter": 112,
+  "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
+  "activeVersionId": "db7000a9-f769-494b-8b00-fa5129678406",
+  "versionCounter": 116,
   "triggerCount": 1,
   "shared": [
     {
@@ -639,7 +673,7 @@
       "project": {
         "updatedAt": "2025-11-16T01:32:20.279Z",
         "createdAt": "2025-11-16T01:32:20.279Z",
-        "id": "YOUR_CREDENTIAL_ID",
+        "id": "YOUR_N8N_PROJECT_ID",
         "name": "My project",
         "type": "team",
         "icon": {
@@ -653,9 +687,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-03-28T00:11:42.897Z",
-    "createdAt": "2026-03-28T00:11:42.897Z",
-    "versionId": "c2614fb8-8c80-42b1-9dfd-f5fa48bb7a5b",
+    "updatedAt": "2026-03-28T00:37:35.759Z",
+    "createdAt": "2026-03-28T00:37:35.759Z",
+    "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
     "workflowId": "YOUR_WF5_WORKFLOW_ID",
     "nodes": [
       {
@@ -753,9 +787,10 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.1,
         "position": [
-          912,
+          1020,
           128
-        ]
+        ],
+        "continueOnFail": true
       },
       {
         "parameters": {
@@ -768,7 +803,8 @@
         "position": [
           1136,
           128
-        ]
+        ],
+        "continueOnFail": true
       },
       {
         "parameters": {
@@ -791,7 +827,8 @@
           912,
           416
         ],
-        "onError": "continueRegularOutput"
+        "onError": "continueRegularOutput",
+        "continueOnFail": true
       },
       {
         "parameters": {
@@ -805,7 +842,8 @@
           1136,
           416
         ],
-        "onError": "continueRegularOutput"
+        "onError": "continueRegularOutput",
+        "continueOnFail": true
       },
       {
         "parameters": {
@@ -820,7 +858,8 @@
           912,
           608
         ],
-        "onError": "continueRegularOutput"
+        "onError": "continueRegularOutput",
+        "continueOnFail": true
       },
       {
         "parameters": {
@@ -834,7 +873,8 @@
           1136,
           608
         ],
-        "onError": "continueRegularOutput"
+        "onError": "continueRegularOutput",
+        "continueOnFail": true
       },
       {
         "parameters": {},
@@ -933,6 +973,7 @@
           2256,
           256
         ],
+        "disabled": true,
         "continueOnFail": true
       },
       {
@@ -1009,7 +1050,7 @@
           2928,
           256
         ],
-        "webhookId": "YOUR_WEBHOOK_ID_7",
+        "webhookId": "YOUR_WEBHOOK_ID",
         "credentials": {
           "telegramApi": {
             "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
@@ -1042,13 +1083,29 @@
           464,
           832
         ],
-        "webhookId": "YOUR_WEBHOOK_ID_8",
+        "webhookId": "YOUR_WEBHOOK_ID",
         "credentials": {
           "telegramApi": {
             "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
             "name": "Telegram account 5"
           }
         }
+      },
+      {
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 4,
+          "unit": "seconds"
+        },
+        "id": "wait-arxiv",
+        "name": "Wait - arXiv rate limit",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          800,
+          128
+        ],
+        "webhookId": "arxiv-wait"
       }
     ],
     "connections": {
@@ -1095,7 +1152,7 @@
         "main": [
           [
             {
-              "node": "HTTP Request - arXiv API",
+              "node": "Wait - arXiv rate limit",
               "type": "main",
               "index": 0
             }
@@ -1260,6 +1317,17 @@
             }
           ]
         ]
+      },
+      "Wait - arXiv rate limit": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request - arXiv API",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "cbnu  aiclab",
@@ -1268,18 +1336,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-03-28T00:11:43.086Z",
-        "id": 150,
+        "createdAt": "2026-03-28T00:37:35.955Z",
+        "id": 152,
         "workflowId": "YOUR_WF5_WORKFLOW_ID",
-        "versionId": "c2614fb8-8c80-42b1-9dfd-f5fa48bb7a5b",
+        "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
         "event": "activated",
         "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
       },
       {
-        "createdAt": "2026-03-28T00:11:42.996Z",
-        "id": 149,
+        "createdAt": "2026-03-28T00:37:35.867Z",
+        "id": 151,
         "workflowId": "YOUR_WF5_WORKFLOW_ID",
-        "versionId": "c2614fb8-8c80-42b1-9dfd-f5fa48bb7a5b",
+        "versionId": "db7000a9-f769-494b-8b00-fa5129678406",
         "event": "deactivated",
         "userId": "2c552541-3463-4a88-a82f-9d7a89d1b9d9"
       }
